@@ -1,5 +1,5 @@
 console.log("DC LOADED");
-var BACKEND_URL="https://your-app.up.railway.app";
+var BACKEND_URL = "https://dark-connector-production.up.railway.app";
 var KNOWN_TRACKERS={"facebook.net":"Facebook Pixel active","google-analytics.com":"Google Analytics active","hotjar.com":"Hotjar recording active","clarity.ms":"Clarity recording active","criteo.com":"Criteo tracker active"};
 function detectPreTickedCheckboxes(){var r=[];document.querySelectorAll("input[type=checkbox]:checked").forEach(function(el){var l=document.querySelector("label[for='"+el.id+"']")||el.closest("label");var t=l?l.innerText.toLowerCase():"";if(["newsletter","subscribe","offers","insurance","marketing"].some(function(w){return t.includes(w);})){r.push({element:el,pattern:"pre_ticked_checkbox",confidence:0.92,message:"Pre-ticked Checkbox"});}});return r;}
 function detectCountdownTimers(){var r=[];["[class*=timer]","[class*=countdown]","[id*=timer]","[id*=countdown]"].forEach(function(s){try{document.querySelectorAll(s).forEach(function(el){r.push({element:el,pattern:"fake_countdown",confidence:0.85,message:"Countdown Timer"});});}catch(e){}});return r;}
