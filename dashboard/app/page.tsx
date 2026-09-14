@@ -59,7 +59,7 @@ export default async function Home() {
       <header className="topbar">
         <div>
           <p className="eyebrow">SURVEILLANCE CONSOLE / V1.0</p>
-          <h1>🕵️ Dark Connector</h1>
+          <h1>Dark Connector</h1>
         </div>
         <div className="live-status"><span /> SYSTEM ONLINE</div>
       </header>
