@@ -1,13 +1,17 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from core.db.database import get_db
 from core.db.db.models import Report, SiteScore
 from core.db.db.db.schemas import ReportCreate
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 
 @router.post("/report")
-async def create_report(payload: ReportCreate, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+async def create_report(request: Request, payload: ReportCreate, db: Session = Depends(get_db)):
     for pattern in payload.patterns:
         report = Report(
             site_url=payload.site_url,
@@ -28,4 +32,4 @@ async def create_report(payload: ReportCreate, db: Session = Depends(get_db)):
     site.score = min(100, site.confirmed_flags * 5 + site.total_flags)
     
     db.commit()
-    return {"status": "saved", "patterns_count": len(payload.patterns)} 
+    return {"status": "saved", "patterns_count": len(payload.patterns)}
