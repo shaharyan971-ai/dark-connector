@@ -1,4 +1,10 @@
-
+<!DOCTYPE html>
+<html lang="en" data-mode="after">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DarkConnector — Ultimate</title>
+<style>
   /* ============================================================
      DESIGN TOKENS
      ============================================================ */
@@ -166,6 +172,20 @@
   .nav-links a.active{ color:var(--ink); background:rgba(255,255,255,0.07); }
 
   .nav-right{ display:flex; align-items:center; gap:14px; }
+
+  /* Before/After preview toggle */
+  .mode-toggle{
+    display:flex; background:rgba(255,255,255,0.04); border:1px solid var(--border);
+    border-radius:99px; padding:2px;
+  }
+  .mode-btn{
+    font-family:var(--font-mono); font-size:10px; letter-spacing:1px;
+    color:var(--ink-faint); background:none; border:none; cursor:pointer;
+    padding:5px 11px; border-radius:99px;
+    transition:background .18s var(--ease), color .18s var(--ease);
+  }
+  .mode-btn:hover{ color:var(--ink-dim); }
+  .mode-btn.active{ background:rgba(var(--violet-fg-rgb),0.22); color:var(--violet-fg); font-weight:700; }
 
   .status-pill{
     display:flex; align-items:center; gap:6px;
@@ -350,6 +370,14 @@
   .empty-state .title{ font-size:11px; color:var(--ink-faint); letter-spacing:2px; margin-top:12px; font-weight:700; }
   .empty-state .sub{ font-size:10.5px; color:var(--ink-ghost); margin-top:4px; }
 
+  /* Before/After mode — "before" hides the newly-added interactive features */
+  [data-mode="before"] .toolbar-new,
+  [data-mode="before"] .sort-btn svg,
+  [data-mode="before"] .row-detail{ display:none; }
+  [data-mode="before"] .sort-btn{ cursor:default; pointer-events:none; color:var(--ink-faint); }
+  [data-mode="before"] .table-row{ cursor:default; }
+  [data-mode="before"] .hamburger-btn{ opacity:.35; pointer-events:none; }
+
   /* ---- side column ---- */
   .side-col{ display:flex; flex-direction:column; gap:16px; }
 
@@ -376,3 +404,580 @@
     font-size:10px; color:var(--ink-ghost); letter-spacing:1.5px; font-family:var(--font-mono);
   }
 
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width:980px){
+    .main-grid{ grid-template-columns:1fr; }
+    .kpi-row{ grid-template-columns:1fr 1fr; }
+  }
+  @media (max-width:640px){
+    .content{ padding:0 16px 40px; }
+    .navbar{ padding:14px 16px; }
+    .nav-links{ display:none; }
+    .hamburger-btn{ display:flex; }
+    .mobile-nav{ display:flex; }
+    .mode-toggle .mode-btn{ padding:5px 8px; font-size:9px; }
+    .kpi-row{ grid-template-columns:1fr; }
+    .table-head, .table-row{ grid-template-columns:24px 1fr 46px 58px 48px; padding-left:14px; padding-right:14px; }
+    .page-head h1{ font-size:24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="dashboard">
+  <div id="bg-map" class="bg-layer"></div>
+  <canvas id="bg-pcb" class="bg-layer"></canvas>
+  <div class="bg-vignette"></div>
+  <div class="shimmer"></div>
+
+  <nav class="navbar">
+    <div class="nav-left">
+      <div class="brand">
+        <div class="dot"></div>
+        <div class="name">DARK<span>CONNECTOR</span></div>
+      </div>
+      <div class="nav-links">
+        <a href="#" class="active">Overview</a>
+        <a href="#">Sites</a>
+        <a href="#">Patterns</a>
+        <a href="#">Alerts</a>
+        <a href="#">Settings</a>
+      </div>
+    </div>
+    <div class="nav-right">
+      <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Preview mode">
+        <button type="button" class="mode-btn" data-mode="before">Before</button>
+        <button type="button" class="mode-btn active" data-mode="after">After</button>
+      </div>
+      <div class="status-pill"><div class="dot"></div><span>SYSTEM ONLINE</span></div>
+      <div class="avatar">DC</div>
+      <button class="hamburger-btn" id="hamburger-btn" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <div class="mobile-nav" id="mobile-nav">
+    <a href="#" class="active">Overview</a>
+    <a href="#">Sites</a>
+    <a href="#">Patterns</a>
+    <a href="#">Alerts</a>
+    <a href="#">Settings</a>
+  </div>
+
+  <div class="content">
+    <div class="page-head">
+      <div class="eyebrow">NETWORK OVERVIEW</div>
+      <h1>Manipulation patterns, <em>made visible.</em></h1>
+      <p>A live readout of deceptive interface signals detected across the web in real time.</p>
+    </div>
+
+    <!-- KPI ROW -->
+    <div class="kpi-row">
+      <div class="panel kpi-card accent" role="group" aria-label="Total patterns detected">
+        <div class="kpi-top">
+          <div class="kpi-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+          </div>
+          <div class="kpi-trend up">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg>
+            12%
+          </div>
+        </div>
+        <div class="kpi-lbl">TOTAL PATTERNS</div>
+        <div class="kpi-num" data-target="247" id="stat-patterns">0</div>
+        <div class="kpi-sub">detected signals</div>
+        <svg class="spark" viewBox="0 0 160 22" preserveAspectRatio="none" aria-hidden="true">
+          <path class="fill" d="M0,17 L20,14 L40,15 L60,10 L80,11 L100,6 L120,7 L140,3 L160,4 L160,22 L0,22 Z" style="fill:var(--violet-fg)"/>
+          <path d="M0,17 L20,14 L40,15 L60,10 L80,11 L100,6 L120,7 L140,3 L160,4" style="stroke:var(--violet-fg)"/>
+        </svg>
+      </div>
+
+      <div class="panel kpi-card" role="group" aria-label="Sites scanned">
+        <div class="kpi-top">
+          <div class="kpi-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z"/></svg>
+          </div>
+          <div class="kpi-trend up">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg>
+            5%
+          </div>
+        </div>
+        <div class="kpi-lbl">SITES SCANNED</div>
+        <div class="kpi-num" data-target="83" id="stat-sites">0</div>
+        <div class="kpi-sub">unique domains</div>
+        <svg class="spark" viewBox="0 0 160 22" preserveAspectRatio="none" aria-hidden="true">
+          <path class="fill" d="M0,16 L20,16 L40,13 L60,14 L80,11 L100,12 L120,8 L140,9 L160,6 L160,22 L0,22 Z" style="fill:var(--cyan-fg)"/>
+          <path d="M0,16 L20,16 L40,13 L60,14 L80,11 L100,12 L120,8 L140,9 L160,6" style="stroke:var(--cyan-fg)"/>
+        </svg>
+      </div>
+
+      <div class="panel kpi-card" role="group" aria-label="Average risk score">
+        <div class="kpi-top">
+          <div class="kpi-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10.5 20.5 1.5-1.5m0 0L18 13m-6 6L6 13m6 6V4"/><path d="M4 4h16"/></svg>
+          </div>
+          <div class="kpi-trend down">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M17 7 7 17M7 7v10h10"/></svg>
+            3%
+          </div>
+        </div>
+        <div class="kpi-lbl">AVG RISK SCORE</div>
+        <div class="kpi-num" data-target="80" id="stat-risk">0</div>
+        <div class="kpi-sub">across all sites</div>
+        <svg class="spark" viewBox="0 0 160 22" preserveAspectRatio="none" aria-hidden="true">
+          <path class="fill" d="M0,8 L20,10 L40,7 L60,11 L80,9 L100,13 L120,11 L140,15 L160,14 L160,22 L0,22 Z" style="fill:var(--amber-fg)"/>
+          <path d="M0,8 L20,10 L40,7 L60,11 L80,9 L100,13 L120,11 L140,15 L160,14" style="stroke:var(--amber-fg)"/>
+        </svg>
+      </div>
+
+      <div class="panel kpi-card" role="group" aria-label="Monitor status">
+        <div class="kpi-top">
+          <div class="kpi-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </div>
+        </div>
+        <div class="kpi-lbl">MONITOR STATUS</div>
+        <div class="kpi-num emerald" id="stat-status">—</div>
+        <div class="kpi-sub" id="stat-status-sub">last sync: —</div>
+        <svg class="spark" viewBox="0 0 160 22" preserveAspectRatio="none" aria-hidden="true">
+          <path class="fill" d="M0,11 L20,10 L40,12 L60,9 L80,11 L100,8 L120,10 L140,7 L160,9 L160,22 L0,22 Z" style="fill:var(--emerald-fg)"/>
+          <path d="M0,11 L20,10 L40,12 L60,9 L80,11 L100,8 L120,10 L140,7 L160,9" style="stroke:var(--emerald-fg)"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="main-grid">
+      <div class="panel leaderboard-panel">
+        <div class="panel-head">
+          <div class="titles">
+            <div class="eyebrow">RISK INDEX</div>
+            <h2>Site leaderboard</h2>
+          </div>
+          <span class="count" id="record-count">0 RECORDS</span>
+        </div>
+
+        <div class="toolbar-new" id="toolbar-new">
+          <div class="search-box">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+            <input type="text" id="site-search" placeholder="Search domain…" aria-label="Search sites by domain">
+          </div>
+          <div class="range-group" role="group" aria-label="Time range">
+            <button type="button" class="range-btn active" data-range="24h">24h</button>
+            <button type="button" class="range-btn" data-range="7d">7d</button>
+            <button type="button" class="range-btn" data-range="30d">30d</button>
+          </div>
+        </div>
+
+        <div id="table-body"></div>
+      </div>
+
+      <div class="side-col">
+        <div class="panel">
+          <div class="panel-head">
+            <div class="titles">
+              <div class="eyebrow">DETECTED</div>
+              <h2>Pattern breakdown</h2>
+            </div>
+          </div>
+          <div id="breakdown-body"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div class="titles">
+              <div class="eyebrow">LIVE FEED</div>
+              <h2>Recent activity</h2>
+            </div>
+          </div>
+          <div id="activity-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="page-foot">
+      <span>DC // DARK CONNECTOR</span>
+      <span>API LINK ESTABLISHED</span>
+    </footer>
+  </div>
+</div>
+
+<script>
+(function(){
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ============================================================
+     MOUSE-REACTIVE BACKGROUND PARALLAX
+     Background drifts a few px toward the cursor instead of
+     auto-animating — magnitude kept low for a subtle effect.
+     ============================================================ */
+  var bgMap = document.getElementById('bg-map');
+  var bgPcb = document.getElementById('bg-pcb');
+  var targetX = 0, targetY = 0;   // normalized -1..1, from cursor
+  var curX = 0, curY = 0;         // eased current position
+
+  var MAP_MAX_PX = 9;   // how far the map can drift, in px — keep small
+  var PCB_MAX_PX = 5;   // pcb drifts opposite, slightly less, for subtle depth
+  var EASE = 0.06;       // lower = smoother/laggier follow
+
+  if (!reduceMotion) {
+    window.addEventListener('mousemove', function(e){
+      targetX = (e.clientX / window.innerWidth - 0.5) * 2;
+      targetY = (e.clientY / window.innerHeight - 0.5) * 2;
+    });
+    window.addEventListener('mouseleave', function(){ targetX = 0; targetY = 0; });
+
+    (function parallaxLoop(){
+      curX += (targetX - curX) * EASE;
+      curY += (targetY - curY) * EASE;
+
+      var mx = (curX * MAP_MAX_PX).toFixed(2);
+      var my = (curY * MAP_MAX_PX * 0.7).toFixed(2);
+      bgMap.style.transform = 'scale(1.06) translate(' + mx + 'px,' + my + 'px)';
+
+      var px = (-curX * PCB_MAX_PX).toFixed(2);
+      var py = (-curY * PCB_MAX_PX * 0.7).toFixed(2);
+      bgPcb.style.transform = 'translate(' + px + 'px,' + py + 'px)';
+
+      requestAnimationFrame(parallaxLoop);
+    })();
+  }
+
+  /* ============================================================
+     DATA — swap these arrays for your real API/data source
+     ============================================================ */
+  var siteData = [
+    { domain: 'booking.com',  flags: 42, confirmed: 38, risk: 94, tier: 'high',
+      firstSeen:'3 Jun 2026', lastScan:'2 min ago', patterns:'Confirmshaming, Fake urgency' },
+    { domain: 'flipkart.com', flags: 31, confirmed: 25, risk: 81, tier: 'med',
+      firstSeen:'19 Jul 2026', lastScan:'18 min ago', patterns:'Fake urgency, Forced continuity' },
+    { domain: 'amazon.in',    flags: 19, confirmed: 12, risk: 67, tier: 'low',
+      firstSeen:'12 Aug 2026', lastScan:'6 hr ago', patterns:'Hidden costs, Forced continuity' }
+  ];
+
+  var patternBreakdown = [
+    { name: 'Confirmshaming',      pct: 34, color: 'var(--violet-fg)' },
+    { name: 'Fake urgency',        pct: 27, color: 'var(--cyan-fg)' },
+    { name: 'Forced continuity',   pct: 21, color: 'var(--amber-fg)' },
+    { name: 'Hidden costs',        pct: 18, color: 'var(--rose-fg)' }
+  ];
+
+  var activityFeed = [
+    { color: 'var(--rose-fg)', text: 'New high-risk pattern flagged on <b>booking.com</b>', time: '2 min ago' },
+    { color: 'var(--cyan-fg)', text: '<b>flipkart.com</b> re-scanned, 3 patterns cleared', time: '18 min ago' },
+    { color: 'var(--emerald-fg)', text: 'Scan completed for 12 new domains', time: '1 hr ago' },
+    { color: 'var(--violet-fg)', text: '<b>amazon.in</b> added to watchlist', time: '3 hr ago' }
+  ];
+
+  /* ============================================================
+     RENDER: LEADERBOARD TABLE / EMPTY STATE
+     — supports click-to-sort columns, live domain search, and a
+       click-to-expand detail row. All of it is hidden/disabled
+       when data-mode="before" (see the Before/After toggle).
+     ============================================================ */
+  var tableBody = document.getElementById('table-body');
+  var recordCount = document.getElementById('record-count');
+  var pillClass = { high: 'pill-high', med: 'pill-med', low: 'pill-low' };
+  var sortKey = null, sortDir = 1; // 1 = asc, -1 = desc
+  var searchTerm = '';
+  var expandedDomain = null;
+
+  function getFilteredSortedData(){
+    var rows = siteData.filter(function(r){
+      return r.domain.toLowerCase().indexOf(searchTerm.toLowerCase()) !== -1;
+    });
+    if (sortKey) {
+      rows = rows.slice().sort(function(a, b){
+        var av = a[sortKey], bv = b[sortKey];
+        if (typeof av === 'string') return av.localeCompare(bv) * sortDir;
+        return (av - bv) * sortDir;
+      });
+    }
+    return rows;
+  }
+
+  function sortArrow(){
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  }
+
+  function renderTable(){
+    var rows = getFilteredSortedData();
+    recordCount.textContent = rows.length + ' RECORD' + (rows.length === 1 ? '' : 'S');
+
+    if (siteData.length === 0) {
+      tableBody.innerHTML =
+        '<div class="empty-state">' +
+          '<div class="icon">&#9678;</div>' +
+          '<div class="title">NO SITE REPORTS YET</div>' +
+          '<div class="sub">Detections will appear here as data flows in</div>' +
+        '</div>';
+      return;
+    }
+
+    function headCell(label, key){
+      var isActive = sortKey === key;
+      return '<button type="button" class="sort-btn' + (isActive ? ' active dir-' + (sortDir === 1 ? 'asc' : 'desc') : '') +
+        '" data-sort="' + key + '" aria-label="Sort by ' + label + '">' + label + sortArrow() + '</button>';
+    }
+
+    var html = '<div class="table-head">' +
+      '<span>#</span>' +
+      '<span>' + headCell('DOMAIN', 'domain') + '</span>' +
+      '<span>' + headCell('FLAGS', 'flags') + '</span>' +
+      '<span>' + headCell('CONFIRMED', 'confirmed') + '</span>' +
+      '<span>' + headCell('RISK', 'risk') + '</span>' +
+    '</div>';
+
+    if (rows.length === 0) {
+      html += '<div class="empty-state"><div class="icon">&#9678;</div><div class="title">NO MATCHES</div><div class="sub">Try a different search term</div></div>';
+    } else {
+      rows.forEach(function(row, i){
+        var isOpen = expandedDomain === row.domain;
+        html +=
+          '<div class="table-row" data-domain="' + row.domain + '" tabindex="0" role="button" aria-expanded="' + isOpen + '" aria-label="' + row.domain + ', risk score ' + row.risk + ', expand for details">' +
+            '<span class="rank">' + String(i + 1).padStart(2, '0') + '</span>' +
+            '<span class="domain-cell"><span class="favicon-dot">' + row.domain.charAt(0).toUpperCase() + '</span><span class="domain">' + row.domain + '</span></span>' +
+            '<span class="flags">' + row.flags + '</span>' +
+            '<span class="flags">' + row.confirmed + '</span>' +
+            '<span><span class="score-pill ' + pillClass[row.tier] + '">' + row.risk + '</span></span>' +
+          '</div>';
+        if (isOpen) {
+          html +=
+            '<div class="row-detail">' +
+              '<div><b>FIRST SEEN</b>' + (row.firstSeen || '—') + '</div>' +
+              '<div><b>LAST SCAN</b>' + (row.lastScan || '—') + '</div>' +
+              '<div><b>PATTERNS FOUND</b>' + (row.patterns || '—') + '</div>' +
+            '</div>';
+        }
+      });
+    }
+    tableBody.innerHTML = html;
+  }
+
+  renderTable();
+
+  tableBody.addEventListener('click', function(e){
+    if (document.documentElement.dataset.mode === 'before') return;
+    var sortBtn = e.target.closest('.sort-btn');
+    if (sortBtn) {
+      var key = sortBtn.getAttribute('data-sort');
+      sortDir = (sortKey === key) ? -sortDir : 1;
+      sortKey = key;
+      renderTable();
+      return;
+    }
+    var row = e.target.closest('.table-row');
+    if (row) {
+      var d = row.getAttribute('data-domain');
+      expandedDomain = (expandedDomain === d) ? null : d;
+      renderTable();
+    }
+  });
+  tableBody.addEventListener('keydown', function(e){
+    if (document.documentElement.dataset.mode === 'before') return;
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var row = e.target.closest('.table-row');
+    if (!row) return;
+    e.preventDefault();
+    var d = row.getAttribute('data-domain');
+    expandedDomain = (expandedDomain === d) ? null : d;
+    renderTable();
+  });
+
+  var searchInput = document.getElementById('site-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', function(){
+      searchTerm = searchInput.value;
+      renderTable();
+    });
+  }
+
+  document.querySelectorAll('.range-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.range-btn').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      // demo-only: a real integration would refetch siteData for the selected range here
+    });
+  });
+
+  /* ============================================================
+     BEFORE / AFTER PREVIEW TOGGLE
+     ============================================================ */
+  document.querySelectorAll('.mode-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.mode-btn').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      document.documentElement.dataset.mode = btn.getAttribute('data-mode');
+      // reset search/sort/expand state so "before" always shows the plain original table
+      searchTerm = ''; sortKey = null; sortDir = 1; expandedDomain = null;
+      if (searchInput) searchInput.value = '';
+      renderTable();
+    });
+  });
+
+  /* ============================================================
+     MOBILE HAMBURGER MENU
+     ============================================================ */
+  var hamburgerBtn = document.getElementById('hamburger-btn');
+  var mobileNav = document.getElementById('mobile-nav');
+  if (hamburgerBtn && mobileNav) {
+    hamburgerBtn.addEventListener('click', function(){
+      var isOpen = mobileNav.classList.toggle('open');
+      hamburgerBtn.setAttribute('aria-expanded', isOpen);
+    });
+  }
+
+  /* ============================================================
+     RENDER: PATTERN BREAKDOWN BARS
+     ============================================================ */
+  var breakdownBody = document.getElementById('breakdown-body');
+  breakdownBody.innerHTML = patternBreakdown.map(function(p){
+    return (
+      '<div class="breakdown-item">' +
+        '<div class="breakdown-row"><span class="name">' + p.name + '</span><span class="pct">' + p.pct + '%</span></div>' +
+        '<div class="bar-track"><div class="bar-fill" data-pct="' + p.pct + '" style="background:' + p.color + '"></div></div>' +
+      '</div>'
+    );
+  }).join('');
+
+  /* ============================================================
+     RENDER: ACTIVITY FEED
+     ============================================================ */
+  var activityBody = document.getElementById('activity-body');
+  activityBody.innerHTML = activityFeed.map(function(a){
+    return (
+      '<div class="activity-item">' +
+        '<div class="activity-dot" style="background:' + a.color + '"></div>' +
+        '<div><div class="activity-text">' + a.text + '</div><div class="activity-time">' + a.time + '</div></div>' +
+      '</div>'
+    );
+  }).join('');
+
+  /* ============================================================
+     ANIMATED COUNTERS
+     ============================================================ */
+  function animateCounter(el, target, duration) {
+    if (!el) return;
+    if (reduceMotion) { el.textContent = target; return; }
+    var start = performance.now();
+    function tick(now) {
+      var p = Math.min((now - start) / duration, 1);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(eased * target);
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  animateCounter(document.getElementById('stat-patterns'), 247, 1300);
+  animateCounter(document.getElementById('stat-sites'), 83, 1300);
+  animateCounter(document.getElementById('stat-risk'), 80, 1300);
+
+  var statusEl = document.getElementById('stat-status');
+  var statusSub = document.getElementById('stat-status-sub');
+  setTimeout(function(){
+    statusEl.textContent = 'ACTIVE';
+    statusSub.textContent = 'last sync: just now';
+  }, reduceMotion ? 0 : 500);
+
+  setTimeout(function(){
+    document.querySelectorAll('.spark').forEach(function(s){ s.classList.add('drawn'); });
+    document.querySelectorAll('.bar-fill').forEach(function(b){ b.style.width = b.getAttribute('data-pct') + '%'; });
+  }, reduceMotion ? 0 : 200);
+
+  /* ============================================================
+     PCB CIRCUIT CANVAS (procedural, seeded — decorative texture)
+     ============================================================ */
+  var pcbCanvas = document.getElementById('bg-pcb');
+  var pcbCtx = pcbCanvas.getContext('2d');
+
+  function seededRandom(seed){
+    var s = seed % 2147483647; if (s<=0) s += 2147483646;
+    return function(){ s = (s*16807) % 2147483647; return (s-1)/2147483646; };
+  }
+
+  function sizeCanvas(cv){
+    var host = document.querySelector('.dashboard');
+    var w = host.clientWidth, h = Math.max(host.scrollHeight, window.innerHeight);
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = w * dpr; cv.height = h * dpr;
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    return { w:w, h:h };
+  }
+
+  function drawPCB(){
+    var dim = sizeCanvas(pcbCanvas);
+    var w = dim.w, h = dim.h;
+    pcbCtx.clearRect(0,0,w,h);
+    var rand = seededRandom(88);
+
+    var gridX = 26, gridY = 18;
+    var cellW = w/gridX, cellH = h/gridY;
+    var nodes = [];
+    for (var i=0;i<34;i++){
+      nodes.push({
+        x: Math.floor(rand()*gridX)*cellW + cellW/2,
+        y: Math.floor(rand()*gridY)*cellH + cellH/2
+      });
+    }
+
+    pcbCtx.strokeStyle = 'rgba(120,150,255,0.12)';
+    pcbCtx.lineWidth = 1;
+    for (var n=0;n<nodes.length-1;n++){
+      if (rand() > 0.5) continue;
+      var a = nodes[n], b = nodes[n+1];
+      pcbCtx.beginPath();
+      pcbCtx.moveTo(a.x, a.y);
+      pcbCtx.lineTo(b.x, a.y);
+      pcbCtx.lineTo(b.x, b.y);
+      pcbCtx.stroke();
+    }
+
+    for (var c=0;c<6;c++){
+      var cx = rand()*w*0.85 + w*0.075, cy = rand()*h*0.85 + h*0.075;
+      var cw = 34, ch = 20;
+      pcbCtx.strokeStyle = 'rgba(150,170,255,0.16)';
+      pcbCtx.fillStyle = 'rgba(10,14,24,0.25)';
+      pcbCtx.lineWidth = 1;
+      pcbCtx.fillRect(cx-cw/2, cy-ch/2, cw, ch);
+      pcbCtx.strokeRect(cx-cw/2, cy-ch/2, cw, ch);
+      var legs = 4;
+      for (var lg=0; lg<legs; lg++){
+        var lx = cx - cw/2 + (cw/(legs-1))*lg;
+        pcbCtx.beginPath(); pcbCtx.moveTo(lx, cy-ch/2); pcbCtx.lineTo(lx, cy-ch/2-6); pcbCtx.stroke();
+        pcbCtx.beginPath(); pcbCtx.moveTo(lx, cy+ch/2); pcbCtx.lineTo(lx, cy+ch/2+6); pcbCtx.stroke();
+      }
+    }
+
+    var violetRgb = getComputedStyle(document.documentElement).getPropertyValue('--violet-fg-rgb').trim() || '167,139,250';
+    nodes.forEach(function(node, idx){
+      if (idx % 4 !== 0) return;
+      var glow = pcbCtx.createRadialGradient(node.x, node.y, 0, node.x, node.y, 7);
+      glow.addColorStop(0, 'rgba(' + violetRgb + ',0.7)');
+      glow.addColorStop(1, 'rgba(' + violetRgb + ',0)');
+      pcbCtx.fillStyle = glow;
+      pcbCtx.beginPath();
+      pcbCtx.arc(node.x, node.y, 7, 0, Math.PI*2);
+      pcbCtx.fill();
+      pcbCtx.fillStyle = 'rgba(' + violetRgb + ',1)';
+      pcbCtx.beginPath();
+      pcbCtx.arc(node.x, node.y, 1.3, 0, Math.PI*2);
+      pcbCtx.fill();
+    });
+  }
+
+  drawPCB();
+  var resizeT;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeT);
+    resizeT = setTimeout(drawPCB, 150);
+  });
+})();
+</script>
+
+</body>
+</html>
