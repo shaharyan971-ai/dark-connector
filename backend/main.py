@@ -4,12 +4,16 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from core.db.database import Base, engine
+from core.db.database import Base, SessionLocal, engine
 from core.db.db import models  # noqa: F401
+from core.db.db.local_user import ensure_default_user
 from core.db.db.db.routes.detect import router as detect_router
+from core.db.db.db.routes.features import router as features_router
 from core.db.db.db.routes.routes.report import router as report_router
 
 Base.metadata.create_all(bind=engine)
+with SessionLocal() as db:
+    ensure_default_user(db)
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -25,11 +29,12 @@ app.add_middleware(
     ],
     allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "PATCH"],
     allow_headers=["*"],
 )
 
 app.include_router(detect_router, prefix="/api")
+app.include_router(features_router, prefix="/api")
 app.include_router(report_router, prefix="/api")
 
 
