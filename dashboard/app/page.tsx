@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { getLeaderboard } from "@/lib/api";
+import DashboardShell from "@/components/DashboardShell";
 
 type Site = {
   domain: string;
@@ -46,17 +47,6 @@ const activityFeed = [
   },
 ];
 
-const navItems = ["Overview", "Sites", "Patterns", "Alerts", "Settings"];
-
-function seededRandom(seed: number) {
-  let value = seed % 2147483647;
-  if (value <= 0) value += 2147483646;
-  return () => {
-    value = (value * 16807) % 2147483647;
-    return (value - 1) / 2147483646;
-  };
-}
-
 function SortArrow() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
@@ -90,10 +80,6 @@ function Spark({ variant }: { variant: "violet" | "cyan" | "amber" | "emerald" }
 }
 
 export default function Home() {
-  const dashboardRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [range, setRange] = useState("24h");
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -140,12 +126,6 @@ export default function Home() {
     const targets = { patterns: 247, sites: 83, risk: 80 };
     const start = performance.now();
     let counterFrame = 0;
-    let parallaxFrame = 0;
-    let resizeTimer: number | undefined;
-    let targetX = 0;
-    let targetY = 0;
-    let currentX = 0;
-    let currentY = 0;
 
     const animateCounters = (now: number) => {
       const progress = reducedMotion ? 1 : Math.min((now - start) / 1300, 1);
@@ -158,132 +138,14 @@ export default function Home() {
       if (progress < 1) counterFrame = requestAnimationFrame(animateCounters);
     };
 
-    const animateParallax = () => {
-      currentX += (targetX - currentX) * 0.06;
-      currentY += (targetY - currentY) * 0.06;
-      if (mapRef.current) {
-        mapRef.current.style.transform = `scale(1.06) translate(${(currentX * 9).toFixed(2)}px,${(currentY * 9 * 0.7).toFixed(2)}px)`;
-      }
-      if (canvasRef.current) {
-        canvasRef.current.style.transform = `translate(${(-currentX * 5).toFixed(2)}px,${(-currentY * 5 * 0.7).toFixed(2)}px)`;
-      }
-      parallaxFrame = requestAnimationFrame(animateParallax);
-    };
-
-    const handleMouseMove = (event: MouseEvent) => {
-      targetX = (event.clientX / window.innerWidth - 0.5) * 2;
-      targetY = (event.clientY / window.innerHeight - 0.5) * 2;
-    };
-    const handleMouseLeave = () => {
-      targetX = 0;
-      targetY = 0;
-    };
-
-    const drawPcb = () => {
-      const canvas = canvasRef.current;
-      const host = dashboardRef.current;
-      const context = canvas?.getContext("2d");
-      if (!canvas || !host || !context) return;
-
-      const width = host.clientWidth;
-      const height = Math.max(host.scrollHeight, window.innerHeight);
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = width * ratio;
-      canvas.height = height * ratio;
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-      context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      context.clearRect(0, 0, width, height);
-
-      const random = seededRandom(88);
-      const gridX = 26;
-      const gridY = 18;
-      const cellW = width / gridX;
-      const cellH = height / gridY;
-      const nodes = Array.from({ length: 34 }, () => ({
-        x: Math.floor(random() * gridX) * cellW + cellW / 2,
-        y: Math.floor(random() * gridY) * cellH + cellH / 2,
-      }));
-
-      context.strokeStyle = "rgba(120,150,255,0.12)";
-      context.lineWidth = 1;
-      for (let index = 0; index < nodes.length - 1; index += 1) {
-        if (random() > 0.5) continue;
-        const first = nodes[index];
-        const second = nodes[index + 1];
-        context.beginPath();
-        context.moveTo(first.x, first.y);
-        context.lineTo(second.x, first.y);
-        context.lineTo(second.x, second.y);
-        context.stroke();
-      }
-
-      for (let index = 0; index < 6; index += 1) {
-        const centerX = random() * width * 0.85 + width * 0.075;
-        const centerY = random() * height * 0.85 + height * 0.075;
-        const chipW = 34;
-        const chipH = 20;
-        context.strokeStyle = "rgba(150,170,255,0.16)";
-        context.fillStyle = "rgba(10,14,24,0.25)";
-        context.lineWidth = 1;
-        context.fillRect(centerX - chipW / 2, centerY - chipH / 2, chipW, chipH);
-        context.strokeRect(centerX - chipW / 2, centerY - chipH / 2, chipW, chipH);
-        for (let leg = 0; leg < 4; leg += 1) {
-          const legX = centerX - chipW / 2 + (chipW / 3) * leg;
-          context.beginPath();
-          context.moveTo(legX, centerY - chipH / 2);
-          context.lineTo(legX, centerY - chipH / 2 - 6);
-          context.stroke();
-          context.beginPath();
-          context.moveTo(legX, centerY + chipH / 2);
-          context.lineTo(legX, centerY + chipH / 2 + 6);
-          context.stroke();
-        }
-      }
-
-      const violetRgb = getComputedStyle(document.documentElement)
-        .getPropertyValue("--violet-fg-rgb").trim() || "167,139,250";
-      nodes.forEach((node, index) => {
-        if (index % 4 !== 0) return;
-        const glow = context.createRadialGradient(node.x, node.y, 0, node.x, node.y, 7);
-        glow.addColorStop(0, `rgba(${violetRgb},0.7)`);
-        glow.addColorStop(1, `rgba(${violetRgb},0)`);
-        context.fillStyle = glow;
-        context.beginPath();
-        context.arc(node.x, node.y, 7, 0, Math.PI * 2);
-        context.fill();
-        context.fillStyle = `rgba(${violetRgb},1)`;
-        context.beginPath();
-        context.arc(node.x, node.y, 1.3, 0, Math.PI * 2);
-        context.fill();
-      });
-    };
-
     counterFrame = requestAnimationFrame(animateCounters);
-    drawPcb();
     const statusTimer = window.setTimeout(() => setStatusReady(true), reducedMotion ? 0 : 500);
     const animationTimer = window.setTimeout(() => setAnimationsReady(true), reducedMotion ? 0 : 200);
-    const handleResize = () => {
-      window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(drawPcb, 150);
-    };
-
-    window.addEventListener("resize", handleResize);
-    if (!reducedMotion) {
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseleave", handleMouseLeave);
-      parallaxFrame = requestAnimationFrame(animateParallax);
-    }
 
     return () => {
       cancelAnimationFrame(counterFrame);
-      cancelAnimationFrame(parallaxFrame);
       window.clearTimeout(statusTimer);
       window.clearTimeout(animationTimer);
-      window.clearTimeout(resizeTimer);
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseleave", handleMouseLeave);
     };
   }, []);
 
@@ -316,43 +178,8 @@ export default function Home() {
     </button>
   );
 
-  const renderNavigation = () => navItems.map((item, index) => (
-    <a href="#" className={index === 0 ? "active" : ""} key={item}>{item}</a>
-  ));
-
   return (
-    <div className="dashboard" ref={dashboardRef}>
-      <div className="bg-layer" id="bg-map" ref={mapRef} />
-      <canvas className="bg-layer" id="bg-pcb" ref={canvasRef} aria-hidden="true" />
-      <div className="bg-vignette" />
-      <div className="shimmer" />
-
-      <nav className="navbar">
-        <div className="nav-left">
-          <div className="brand">
-            <div className="dot" />
-            <div className="name">DARK<span>CONNECTOR</span></div>
-          </div>
-          <div className="nav-links">{renderNavigation()}</div>
-        </div>
-        <div className="nav-right">
-          <div className="status-pill"><div className="dot" /><span>SYSTEM ONLINE</span></div>
-          <div className="avatar">DC</div>
-          <button
-            className="hamburger-btn"
-            type="button"
-            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileNavOpen}
-            aria-controls="mobile-nav"
-            onClick={() => setMobileNavOpen((isOpen) => !isOpen)}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
-          </button>
-        </div>
-      </nav>
-
-      <div className={`mobile-nav${mobileNavOpen ? " open" : ""}`} id="mobile-nav">{renderNavigation()}</div>
-
+    <DashboardShell>
       <div className="content">
         <div className="page-head">
           <div className="eyebrow">NETWORK OVERVIEW</div>
@@ -496,6 +323,6 @@ export default function Home() {
 
         <footer className="page-foot"><span>DC // DARK CONNECTOR</span><span>API LINK ESTABLISHED</span></footer>
       </div>
-    </div>
+    </DashboardShell>
   );
 }
