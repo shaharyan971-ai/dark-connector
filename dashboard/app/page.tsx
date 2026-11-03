@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getLeaderboard } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { getOverview, getSites, type SiteRange } from "@/lib/api";
 import DashboardShell from "@/components/DashboardShell";
+import usePolling from "@/lib/usePolling";
 
 type Site = {
   domain: string;
@@ -10,42 +11,28 @@ type Site = {
   confirmed: number;
   risk: number;
   tier: "high" | "med" | "low";
-  firstSeen: string;
   lastScan: string;
   patterns: string;
 };
 
 type SortKey = "domain" | "flags" | "confirmed" | "risk";
 
-const patternBreakdown = [
-  { name: "Confirmshaming", pct: 34, color: "var(--violet-fg)" },
-  { name: "Fake urgency", pct: 27, color: "var(--cyan-fg)" },
-  { name: "Forced continuity", pct: 21, color: "var(--amber-fg)" },
-  { name: "Hidden costs", pct: 18, color: "var(--rose-fg)" },
-];
+const activityColors = ["var(--rose-fg)", "var(--cyan-fg)", "var(--emerald-fg)", "var(--violet-fg)"];
+const patternColors = ["var(--violet-fg)", "var(--cyan-fg)", "var(--amber-fg)", "var(--rose-fg)"];
 
-const activityFeed = [
-  {
-    color: "var(--rose-fg)",
-    text: < >New high-risk pattern flagged on <b>booking.com</b></>,
-    time: "2 min ago",
-  },
-  {
-    color: "var(--cyan-fg)",
-    text: <><b>flipkart.com</b> re-scanned, 3 patterns cleared</>,
-    time: "18 min ago",
-  },
-  {
-    color: "var(--emerald-fg)",
-    text: <>Scan completed for 12 new domains</>,
-    time: "1 hr ago",
-  },
-  {
-    color: "var(--violet-fg)",
-    text: <><b>amazon.in</b> added to watchlist</>,
-    time: "3 hr ago",
-  },
-];
+function parseUtcDate(value: string) {
+  return new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(value) ? value : `${value}Z`);
+}
+
+function formatRelativeTime(value: string) {
+  const date = parseUtcDate(value);
+  if (Number.isNaN(date.getTime())) return "Time unavailable";
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
 
 function SortArrow() {
   return (
@@ -55,99 +42,74 @@ function SortArrow() {
   );
 }
 
-function TrendArrow({ down = false }: { down?: boolean }) {
-  return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
-      {down ? <path d="M17 7 7 17M7 7v10h10" /> : <path d="M7 17 17 7M7 7h10v10" />}
-    </svg>
-  );
-}
-
-function Spark({ variant }: { variant: "violet" | "cyan" | "amber" | "emerald" }) {
-  const paths = {
-    violet: "M0,17 L20,14 L40,15 L60,10 L80,11 L100,6 L120,7 L140,3 L160,4",
-    cyan: "M0,16 L20,16 L40,13 L60,14 L80,11 L100,12 L120,8 L140,9 L160,6",
-    amber: "M0,8 L20,10 L40,7 L60,11 L80,9 L100,13 L120,11 L140,15 L160,14",
-    emerald: "M0,11 L20,10 L40,12 L60,9 L80,11 L100,8 L120,10 L140,7 L160,9",
-  };
-  const path = paths[variant];
-  return (
-    <svg className="spark" viewBox="0 0 160 22" preserveAspectRatio="none" aria-hidden="true">
-      <path className="fill" d={`${path} L160,22 L0,22 Z`} style={{ fill: `var(--${variant}-fg)` }} />
-      <path d={path} style={{ stroke: `var(--${variant}-fg)` }} />
-    </svg>
-  );
-}
-
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [range, setRange] = useState("24h");
+  const [range, setRange] = useState<SiteRange>("24h");
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState(1);
   const [expandedDomain, setExpandedDomain] = useState<string | null>(null);
-  const [sites, setSites] = useState<Site[]>([]);
-  const [sitesLoading, setSitesLoading] = useState(true);
-  const [sitesError, setSitesError] = useState(false);
   const [counters, setCounters] = useState({ patterns: 0, sites: 0, risk: 0 });
-  const [statusReady, setStatusReady] = useState(false);
-  const [animationsReady, setAnimationsReady] = useState(false);
+  const countersRef = useRef(counters);
+  const rangeRef = useRef(range);
+  const overviewPolling = usePolling((signal) => getOverview(signal));
+  const {
+    data: sitesData,
+    error: sitesPollingError,
+    loading: sitesPollingLoading,
+    refresh: refreshSites,
+  } = usePolling((signal) => getSites({ range }, signal));
+  const sites: Site[] = (sitesData?.sites ?? []).map((entry) => ({
+    domain: entry.domain,
+    flags: entry.total_flags,
+    confirmed: entry.confirmed_flags,
+    risk: entry.score,
+    tier: entry.score >= 90 ? "high" : entry.score >= 75 ? "med" : "low",
+    lastScan: entry.last_scanned
+      ? parseUtcDate(entry.last_scanned).toLocaleString()
+      : "—",
+    patterns: `${entry.total_flags} reports`,
+  }));
+  const sitesLoading = sitesPollingLoading && !sitesData;
+  const sitesError = Boolean(sitesPollingError && !sitesData);
+  const statusReady = Boolean(overviewPolling.data);
+  const animationsReady = Boolean(overviewPolling.data);
 
   useEffect(() => {
-    let active = true;
-    getLeaderboard()
-      .then((entries) => {
-        if (!active) return;
-        setSites(entries.map((entry) => ({
-          domain: entry.domain,
-          flags: entry.totalFlags,
-          confirmed: entry.confirmedFlags,
-          risk: entry.score,
-          tier: entry.score >= 90 ? "high" : entry.score >= 75 ? "med" : "low",
-          firstSeen: "—",
-          lastScan: "—",
-          patterns: "—",
-        })));
-        setSitesError(false);
-      })
-      .catch(() => {
-        if (active) setSitesError(true);
-      })
-      .finally(() => {
-        if (active) setSitesLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (rangeRef.current === range) return;
+    rangeRef.current = range;
+    void refreshSites();
+  }, [range, refreshSites]);
 
   useEffect(() => {
+    if (!overviewPolling.data) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const targets = { patterns: 247, sites: 83, risk: 80 };
+    const targets = {
+      patterns: overviewPolling.data.total_patterns,
+      sites: overviewPolling.data.sites_scanned,
+      risk: Math.round(overviewPolling.data.average_risk),
+    };
     const start = performance.now();
+    const initial = countersRef.current;
     let counterFrame = 0;
 
     const animateCounters = (now: number) => {
       const progress = reducedMotion ? 1 : Math.min((now - start) / 1300, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setCounters({
-        patterns: Math.round(eased * targets.patterns),
-        sites: Math.round(eased * targets.sites),
-        risk: Math.round(eased * targets.risk),
-      });
+      const next = {
+        patterns: Math.round(initial.patterns + eased * (targets.patterns - initial.patterns)),
+        sites: Math.round(initial.sites + eased * (targets.sites - initial.sites)),
+        risk: Math.round(initial.risk + eased * (targets.risk - initial.risk)),
+      };
+      countersRef.current = next;
+      setCounters(next);
       if (progress < 1) counterFrame = requestAnimationFrame(animateCounters);
     };
 
     counterFrame = requestAnimationFrame(animateCounters);
-    const statusTimer = window.setTimeout(() => setStatusReady(true), reducedMotion ? 0 : 500);
-    const animationTimer = window.setTimeout(() => setAnimationsReady(true), reducedMotion ? 0 : 200);
-
     return () => {
       cancelAnimationFrame(counterFrame);
-      window.clearTimeout(statusTimer);
-      window.clearTimeout(animationTimer);
     };
-  }, []);
+  }, [overviewPolling.data]);
 
   const filteredSites = sites
     .filter((site) => site.domain.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -177,6 +139,22 @@ export default function Home() {
       {label}<SortArrow />
     </button>
   );
+  const patternBreakdown = (overviewPolling.data?.pattern_breakdown ?? []).map(
+    (pattern, index) => ({
+      name: pattern.pattern_type.replace(/_/g, " "),
+      pct: pattern.percentage,
+      color: patternColors[index % patternColors.length],
+    }),
+  );
+  const activityFeed = (overviewPolling.data?.recent_activity ?? []).map(
+    (activity, index) => ({
+      color: activityColors[index % activityColors.length],
+      domain: activity.domain,
+      pattern: activity.pattern_type.replace(/_/g, " "),
+      time: formatRelativeTime(activity.created_at),
+    }),
+  );
+  const ranges: SiteRange[] = ["24h", "7d", "30d"];
 
   return (
     <DashboardShell>
@@ -191,42 +169,41 @@ export default function Home() {
           <div className="panel kpi-card accent" role="group" aria-label="Total patterns detected">
             <div className="kpi-top">
               <div className="kpi-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /></svg></div>
-              <div className="kpi-trend up"><TrendArrow />12%</div>
             </div>
             <div className="kpi-lbl">TOTAL PATTERNS</div>
-            <div className="kpi-num">{counters.patterns}</div>
+            <div className="kpi-num">{overviewPolling.data ? counters.patterns : "—"}</div>
             <div className="kpi-sub">detected signals</div>
-            <Spark variant="violet" />
           </div>
 
           <div className="panel kpi-card" role="group" aria-label="Sites scanned">
             <div className="kpi-top">
               <div className="kpi-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z" /></svg></div>
-              <div className="kpi-trend up"><TrendArrow />5%</div>
             </div>
             <div className="kpi-lbl">SITES SCANNED</div>
-            <div className="kpi-num">{counters.sites}</div>
+            <div className="kpi-num">{overviewPolling.data ? counters.sites : "—"}</div>
             <div className="kpi-sub">unique domains</div>
-            <Spark variant="cyan" />
           </div>
 
           <div className="panel kpi-card" role="group" aria-label="Average risk score">
             <div className="kpi-top">
               <div className="kpi-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m10.5 20.5 1.5-1.5m0 0L18 13m-6 6L6 13m6 6V4" /><path d="M4 4h16" /></svg></div>
-              <div className="kpi-trend down"><TrendArrow down />3%</div>
             </div>
             <div className="kpi-lbl">AVG RISK SCORE</div>
-            <div className="kpi-num">{counters.risk}</div>
+            <div className="kpi-num">{overviewPolling.data ? counters.risk : "—"}</div>
             <div className="kpi-sub">across all sites</div>
-            <Spark variant="amber" />
           </div>
 
           <div className="panel kpi-card" role="group" aria-label="Monitor status">
             <div className="kpi-top"><div className="kpi-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg></div></div>
             <div className="kpi-lbl">MONITOR STATUS</div>
-            <div className="kpi-num emerald">{statusReady ? "ACTIVE" : "—"}</div>
-            <div className="kpi-sub">last sync: {statusReady ? "just now" : "—"}</div>
-            <Spark variant="emerald" />
+            <div className={`kpi-num${overviewPolling.error ? "" : " emerald"}`} aria-live="polite">
+              {overviewPolling.error ? "STALE" : statusReady ? "ACTIVE" : "—"}
+            </div>
+            <div className="kpi-sub">
+              {overviewPolling.lastUpdated
+                ? `last sync: ${formatRelativeTime(overviewPolling.lastUpdated.toISOString())}`
+                : "waiting for API"}
+            </div>
           </div>
         </div>
 
@@ -243,11 +220,16 @@ export default function Home() {
                 <input type="text" value={searchTerm} onChange={(event) => setSearchTerm(event.currentTarget.value)} placeholder="Search domain…" aria-label="Search sites by domain" />
               </div>
               <div className="range-group" role="group" aria-label="Time range">
-                {["24h", "7d", "30d"].map((option) => <button type="button" className={`range-btn${range === option ? " active" : ""}`} key={option} onClick={() => setRange(option)}>{option}</button>)}
+                {ranges.map((option) => <button type="button" className={`range-btn${range === option ? " active" : ""}`} key={option} onClick={() => setRange(option)}>{option}</button>)}
               </div>
             </div>
 
             <div>
+              {sitesPollingError && sitesData && (
+                <div className="empty-state data-error" role="status">
+                  Connection lost. Showing last updated sites.
+                </div>
+              )}
               {sitesLoading ? (
                 <div className="empty-state"><div className="title">LOADING SITE REPORTS</div></div>
               ) : sitesError ? (
@@ -285,7 +267,7 @@ export default function Home() {
                           <span className="flags">{site.confirmed}</span>
                           <span><span className={`score-pill pill-${site.tier}`}>{site.risk}</span></span>
                         </div>
-                        {isExpanded && <div className="row-detail"><div><b>FIRST SEEN</b>{site.firstSeen || "—"}</div><div><b>LAST SCAN</b>{site.lastScan || "—"}</div><div><b>PATTERNS FOUND</b>{site.patterns || "—"}</div></div>}
+                        {isExpanded && <div className="row-detail"><div><b>LAST SCAN</b>{site.lastScan || "—"}</div><div><b>PATTERN REPORTS</b>{site.patterns || "—"}</div></div>}
                       </div>
                     );
                   })}
@@ -304,6 +286,9 @@ export default function Home() {
                     <div className="bar-track"><div className="bar-fill" style={{ background: pattern.color, width: animationsReady ? `${pattern.pct}%` : "0%" }} /></div>
                   </div>
                 ))}
+                {!overviewPolling.loading && patternBreakdown.length === 0 && (
+                  <div className="empty-state"><div className="sub">No pattern reports yet</div></div>
+                )}
               </div>
             </div>
 
@@ -311,17 +296,20 @@ export default function Home() {
               <div className="panel-head"><div className="titles"><div className="eyebrow">LIVE FEED</div><h2>Recent activity</h2></div></div>
               <div>
                 {activityFeed.map((activity, index) => (
-                  <div className="activity-item" key={`${activity.time}-${index}`}>
+                  <div className="activity-item" key={`${activity.domain}-${activity.time}-${index}`}>
                     <div className="activity-dot" style={{ background: activity.color }} />
-                    <div><div className="activity-text">{activity.text}</div><div className="activity-time">{activity.time}</div></div>
+                    <div><div className="activity-text"><b>{activity.domain}</b> · {activity.pattern}</div><div className="activity-time">{activity.time}</div></div>
                   </div>
                 ))}
+                {!overviewPolling.loading && activityFeed.length === 0 && (
+                  <div className="empty-state"><div className="sub">No recent activity yet</div></div>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        <footer className="page-foot"><span>DC // DARK CONNECTOR</span><span>API LINK ESTABLISHED</span></footer>
+        <footer className="page-foot"><span>DC // DARK CONNECTOR</span><span>{overviewPolling.error ? "API CONNECTION DEGRADED" : overviewPolling.data ? "API LINK ESTABLISHED" : "CONNECTING TO API"}</span></footer>
       </div>
     </DashboardShell>
   );

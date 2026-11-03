@@ -13,7 +13,7 @@
       --border: #2d2d47;
       --text: #f4f4f7;
       --muted: #a3a3b5;
-      --accent: #ff3b3b;
+      --accent: #a78bfa;
       --success: #35d07f;
     }
 
@@ -89,7 +89,7 @@
       font-weight: bold;
     }
 
-    .primary:hover { background: #ff5757; }
+    .primary:hover { background: #c4b5fd; }
 
     .clean {
       border-color: rgba(53, 208, 127, .35);
@@ -102,7 +102,7 @@
     .pattern-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-left: 3px solid var(--accent);
+      border-left: 3px solid #fb7185;
       border-radius: 5px;
       padding: 11px;
     }
@@ -131,6 +131,30 @@
     }
 
     .hidden { display: none; }
+    a { color: #22d3ee; }
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 9px;
+      background: #0d0d1a;
+      color: var(--text);
+      font: inherit;
+      margin-top: 6px;
+    }
+    label { display: block; margin-top: 12px; color: var(--muted); font-size: 11px; }
+    button:focus-visible, input:focus-visible, a:focus-visible {
+      outline: 2px solid #a78bfa;
+      outline-offset: 2px;
+    }
+    .account-panel { margin-bottom: 12px; }
+    .account-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .account-email { color: var(--muted); overflow-wrap: anywhere; font-size: 11px; }
+    .account-error { color: #fb7185; margin-top: 10px; }
+    .report-status { color: #fb7185; margin-top: 10px; font-size: 11px; }
+    .actions button { min-width: 0; }
+    .account-panel .actions { margin-top: 12px; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
   </style>
 </head>
 <body>
@@ -141,6 +165,7 @@
     </header>
     <section id="content" aria-live="polite"></section>
   </main>
+  <script src="../config.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

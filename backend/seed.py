@@ -51,6 +51,7 @@ def seed_database(database_path: Path) -> None:
                 [
                     {
                         "site_url": f"https://{domain}/",
+                        "user_id": DEFAULT_USER_ID,
                         "pattern_type": pattern_type,
                         "confidence": confidence,
                         "confirmed": confirmed,
@@ -71,6 +72,7 @@ def seed_database(database_path: Path) -> None:
                 [
                     {
                         "domain": domain,
+                        "user_id": DEFAULT_USER_ID,
                         "total_flags": counts["flags"],
                         "confirmed_flags": counts["confirmed"],
                         "score": min(100, counts["confirmed"] * 5 + counts["flags"]),
@@ -83,6 +85,7 @@ def seed_database(database_path: Path) -> None:
                 Alert.__table__.insert(),
                 [{
                     "site_url": "https://booking.com/",
+                    "user_id": DEFAULT_USER_ID,
                     "pattern_type": "fake_urgency",
                     "severity": "high",
                     "message": "booking.com crossed the configured demo risk threshold.",

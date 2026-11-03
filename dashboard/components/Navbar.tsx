@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { getProfile } from "@/lib/api";
+import usePolling from "@/lib/usePolling";
 
 const navItems = [
   { label: "Overview", href: "/" },
@@ -15,6 +17,14 @@ const navItems = [
 export default function Navbar() {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { data: profile } = usePolling((signal) => getProfile(signal));
+  const initials = profile?.name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "DC";
 
   const renderNavigation = (mobile = false) =>
     navItems.map(({ label, href }) => {
@@ -44,7 +54,14 @@ export default function Navbar() {
         </div>
         <div className="nav-right">
           <div className="status-pill"><div className="dot" /><span>SYSTEM ONLINE</span></div>
-          <div className="avatar">DC</div>
+          <Link
+            href="/profile"
+            className={`avatar${pathname === "/profile" ? " active" : ""}`}
+            aria-label="Open profile"
+            aria-current={pathname === "/profile" ? "page" : undefined}
+          >
+            {initials}
+          </Link>
           <button
             className="hamburger-btn"
             type="button"
@@ -60,6 +77,14 @@ export default function Navbar() {
 
       <div className={`mobile-nav${mobileNavOpen ? " open" : ""}`} id="mobile-nav">
         {renderNavigation(true)}
+        <Link
+          href="/profile"
+          className={pathname === "/profile" ? "active" : ""}
+          aria-current={pathname === "/profile" ? "page" : undefined}
+          onClick={() => setMobileNavOpen(false)}
+        >
+          Profile
+        </Link>
       </div>
     </>
   );

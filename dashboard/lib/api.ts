@@ -1,8 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (
-  typeof window !== "undefined" && window.location.hostname === "localhost"
-    ? "http://localhost:8000"
-    : "https://dark-connector-production.up.railway.app"
-);
+const API_URL = "/api/backend";
 
 export type DashboardStats = {
   totalPatterns: number;
@@ -42,6 +38,21 @@ export type SiteEntry = {
   total_flags: number;
   confirmed_flags: number;
   last_scanned: string | null;
+};
+
+export type SiteDetails = {
+  domain: string;
+  score: number;
+  total_flags: number;
+  confirmed_flags: number;
+  first_seen: string;
+  last_scan: string;
+  patterns_found: {
+    pattern_type: string;
+    confidence: number;
+    confirmed: boolean;
+    created_at: string;
+  }[];
 };
 
 export type SitesResponse = {
@@ -90,15 +101,6 @@ export type Settings = {
 
 export type SettingsUpdate = Settings;
 
-type ApiStats = {
-  total_patterns?: number;
-  totalPatterns?: number;
-  patterns_found?: number;
-  sites_scanned?: number;
-  sitesScanned?: number;
-  sites?: number;
-};
-
 type ApiReport = {
   domain?: string;
   site_url?: string;
@@ -109,6 +111,17 @@ type ApiReport = {
   confirmed_flags?: number;
   confirmedFlags?: number;
 };
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly responseBody: string,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
 
 function numberOrZero(value: number | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -124,92 +137,102 @@ async function fetchApi<T>(
     ...options,
   });
   if (!response.ok) {
-    throw new Error(`${label} request failed with ${response.status}`);
+    const responseBody = await response.text();
+    throw new ApiRequestError(
+      `${label} request failed with ${response.status}`,
+      response.status,
+      responseBody,
+    );
   }
   return (await response.json()) as T;
 }
 
-export function getOverview(): Promise<Overview> {
-  return fetchApi("/api/overview", "Overview");
+export function getOverview(signal?: AbortSignal): Promise<Overview> {
+  return fetchApi("/api/overview", "Overview", { signal });
 }
 
 export function getSites(options: {
   search?: string;
   sort?: "domain" | "score" | "total_flags" | "confirmed_flags";
   range?: SiteRange;
-} = {}): Promise<SitesResponse> {
+} = {}, signal?: AbortSignal): Promise<SitesResponse> {
   const query = new URLSearchParams();
   if (options.search !== undefined) query.set("search", options.search);
   if (options.sort !== undefined) query.set("sort", options.sort);
   if (options.range !== undefined) query.set("range", options.range);
   const suffix = query.size > 0 ? `?${query.toString()}` : "";
-  return fetchApi(`/api/sites${suffix}`, "Sites");
+  return fetchApi(`/api/sites${suffix}`, "Sites", { signal });
 }
 
-export function getPatterns(): Promise<PatternsResponse> {
-  return fetchApi("/api/patterns", "Patterns");
+export function getSite(domain: string, signal?: AbortSignal): Promise<SiteDetails> {
+  return fetchApi(`/api/sites/${encodeURIComponent(domain)}`, "Site", { signal });
 }
 
-export function getAlerts(): Promise<AlertsResponse> {
-  return fetchApi("/api/alerts", "Alerts");
+export function getPatterns(signal?: AbortSignal): Promise<PatternsResponse> {
+  return fetchApi("/api/patterns", "Patterns", { signal });
 }
 
-export function markAlertRead(alertId: string): Promise<{ id: string; read: boolean }> {
+export function getAlerts(signal?: AbortSignal): Promise<AlertsResponse> {
+  return fetchApi("/api/alerts", "Alerts", { signal });
+}
+
+export function markAlertRead(
+  alertId: string,
+  signal?: AbortSignal,
+): Promise<{ id: string; read: boolean }> {
   return fetchApi(
     `/api/alerts/${encodeURIComponent(alertId)}/read`,
     "Mark alert read",
-    { method: "PATCH" },
+    { method: "PATCH", signal },
   );
 }
 
-export function getProfile(): Promise<Profile> {
-  return fetchApi("/api/profile", "Profile");
+export function getProfile(signal?: AbortSignal): Promise<Profile> {
+  return fetchApi("/api/profile", "Profile", { signal });
 }
 
-export function updateProfile(payload: ProfileUpdate): Promise<Profile> {
+export function updateProfile(
+  payload: ProfileUpdate,
+  signal?: AbortSignal,
+): Promise<Profile> {
   return fetchApi("/api/profile", "Profile update", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal,
   });
 }
 
-export function getSettings(): Promise<Settings> {
-  return fetchApi("/api/settings", "Settings");
+export function getSettings(signal?: AbortSignal): Promise<Settings> {
+  return fetchApi("/api/settings", "Settings", { signal });
 }
 
-export function updateSettings(payload: SettingsUpdate): Promise<Settings> {
+export function updateSettings(
+  payload: SettingsUpdate,
+  signal?: AbortSignal,
+): Promise<Settings> {
   return fetchApi("/api/settings", "Settings update", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal,
   });
 }
 
 export async function getStats(): Promise<DashboardStats> {
-  const response = await fetch(`${API_URL}/`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Stats request failed with ${response.status}`);
-  }
-
-  const data = (await response.json()) as ApiStats;
+  const data = await fetchApi<Overview>("/api/overview", "Stats");
   return {
-    totalPatterns: numberOrZero(
-      data.total_patterns ?? data.totalPatterns ?? data.patterns_found,
-    ),
-    sitesScanned: numberOrZero(
-      data.sites_scanned ?? data.sitesScanned ?? data.sites,
-    ),
+    totalPatterns: numberOrZero(data.total_patterns),
+    sitesScanned: numberOrZero(data.sites_scanned),
   };
 }
 
-export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
-  const response = await fetch(`${API_URL}/api/report`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Leaderboard request failed with ${response.status}`);
-  }
-
-  const data = (await response.json()) as ApiReport[] | { sites?: ApiReport[] };
+export async function getLeaderboard(signal?: AbortSignal): Promise<LeaderboardEntry[]> {
+  const data = await fetchApi<ApiReport[] | { sites?: ApiReport[] }>(
+    "/api/report",
+    "Leaderboard",
+    { signal },
+  );
   const reports = Array.isArray(data) ? data : data.sites ?? [];
 
   return reports

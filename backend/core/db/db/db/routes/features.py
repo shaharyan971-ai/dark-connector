@@ -6,10 +6,11 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from core.auth import get_current_user
 from core.db.database import get_db
 from core.db.db.domain import extract_domain
-from core.db.db.local_user import DEFAULT_USER_ID, ensure_default_user
-from core.db.db.models import Alert, Report, SiteScore, User, UserSettings
+from core.db.db.models import Alert, Report, SiteScore, UserSettings
+from core.db.db.tenant import ensure_authenticated_user
 from core.db.db.db.schemas import ProfileUpdate, SettingsUpdate
 
 router = APIRouter()
@@ -20,19 +21,8 @@ def _range_start(value: str) -> datetime:
     return datetime.now(timezone.utc) - timedelta(hours=hours)
 
 
-def _local_user(db: Session) -> User:
-    user = db.get(User, DEFAULT_USER_ID)
-    if user is None:
-        try:
-            user = ensure_default_user(db)
-        except SQLAlchemyError as error:
-            db.rollback()
-            raise HTTPException(status_code=500, detail="Could not load local profile") from error
-    return user
-
-
-def _report_domain_counts(db: Session, since: datetime | None = None):
-    statement = select(Report.site_url, Report.confirmed)
+def _report_domain_counts(db: Session, user_id: str, since: datetime | None = None):
+    statement = select(Report.site_url, Report.confirmed).where(Report.user_id == user_id)
     if since is not None:
         statement = statement.where(Report.created_at >= since)
     counts: dict[str, dict[str, int]] = {}
@@ -45,18 +35,21 @@ def _report_domain_counts(db: Session, since: datetime | None = None):
 
 
 @router.get("/overview")
-def get_overview(db: Session = Depends(get_db)):
-    total_patterns = db.query(func.count(Report.id)).scalar() or 0
-    sites_scanned = db.query(func.count(SiteScore.domain)).scalar() or 0
-    average_risk = db.query(func.avg(SiteScore.score)).scalar() or 0
+def get_overview(claims: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_id = ensure_authenticated_user(db, claims).id
+    total_patterns = db.query(func.count(Report.id)).filter(Report.user_id == user_id).scalar() or 0
+    sites_scanned = db.query(func.count(SiteScore.domain)).filter(SiteScore.user_id == user_id).scalar() or 0
+    average_risk = db.query(func.avg(SiteScore.score)).filter(SiteScore.user_id == user_id).scalar() or 0
     pattern_counts = (
         db.query(Report.pattern_type, func.count(Report.id).label("count"))
+        .filter(Report.user_id == user_id)
         .group_by(Report.pattern_type)
         .order_by(func.count(Report.id).desc(), Report.pattern_type.asc())
         .all()
     )
     recent_reports = (
         db.query(Report.site_url, Report.pattern_type, Report.confidence, Report.created_at)
+        .filter(Report.user_id == user_id)
         .order_by(Report.created_at.desc())
         .limit(10)
         .all()
@@ -93,10 +86,12 @@ def get_sites(
     search: str = "",
     sort: Literal["domain", "score", "total_flags", "confirmed_flags"] = "score",
     range: Literal["24h", "7d", "30d"] = Query("24h"),
+    claims: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    site_rows = db.query(SiteScore).all()
-    range_counts = _report_domain_counts(db, _range_start(range))
+    user_id = ensure_authenticated_user(db, claims).id
+    site_rows = db.query(SiteScore).filter(SiteScore.user_id == user_id).all()
+    range_counts = _report_domain_counts(db, user_id, _range_start(range))
     sites = []
     for site in site_rows:
         if search and search.casefold() not in site.domain.casefold():
@@ -118,20 +113,20 @@ def get_sites(
 
 
 @router.get("/sites/{domain}")
-def get_site(domain: str, db: Session = Depends(get_db)):
+def get_site(domain: str, claims: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_id = ensure_authenticated_user(db, claims).id
     normalized_domain = extract_domain(domain)
-    site = db.get(SiteScore, normalized_domain)
+    site = db.get(SiteScore, (user_id, normalized_domain))
     if site is None:
         raise HTTPException(status_code=404, detail="Site not found")
 
     reports = (
-        db.query(Report.pattern_type, Report.created_at, Report.confidence, Report.confirmed)
+        db.query(Report)
+        .filter(Report.user_id == user_id)
         .order_by(Report.created_at.asc())
         .all()
     )
-    matching = [
-        report for report in reports if extract_domain(report.site_url) == normalized_domain
-    ]
+    matching = [report for report in reports if extract_domain(report.site_url) == normalized_domain]
     if not matching:
         raise HTTPException(status_code=404, detail="Site reports not found")
     return {
@@ -154,13 +149,15 @@ def get_site(domain: str, db: Session = Depends(get_db)):
 
 
 @router.get("/patterns")
-def get_patterns(db: Session = Depends(get_db)):
+def get_patterns(claims: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_id = ensure_authenticated_user(db, claims).id
     rows = (
         db.query(
             Report.pattern_type,
             func.count(Report.id).label("count"),
             func.avg(Report.confidence).label("average_confidence"),
         )
+        .filter(Report.user_id == user_id)
         .group_by(Report.pattern_type)
         .order_by(func.count(Report.id).desc(), Report.pattern_type.asc())
         .all()
@@ -178,8 +175,9 @@ def get_patterns(db: Session = Depends(get_db)):
 
 
 @router.get("/alerts")
-def get_alerts(db: Session = Depends(get_db)):
-    alerts = db.query(Alert).order_by(Alert.created_at.desc(), Alert.id.asc()).all()
+def get_alerts(claims: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_id = ensure_authenticated_user(db, claims).id
+    alerts = db.query(Alert).filter(Alert.user_id == user_id).order_by(Alert.created_at.desc(), Alert.id.asc()).all()
     return {
         "alerts": [
             {
@@ -197,8 +195,9 @@ def get_alerts(db: Session = Depends(get_db)):
 
 
 @router.patch("/alerts/{alert_id}/read")
-def mark_alert_read(alert_id: str, db: Session = Depends(get_db)):
-    alert = db.get(Alert, alert_id)
+def mark_alert_read(alert_id: str, claims: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_id = ensure_authenticated_user(db, claims).id
+    alert = db.query(Alert).filter(Alert.id == alert_id, Alert.user_id == user_id).first()
     if alert is None:
         raise HTTPException(status_code=404, detail="Alert not found")
     try:
@@ -211,17 +210,16 @@ def mark_alert_read(alert_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/profile")
-def get_profile(db: Session = Depends(get_db)):
-    user = _local_user(db)
+def get_profile(claims: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user = ensure_authenticated_user(db, claims)
     return {"id": user.id, "name": user.name, "email": user.email, "created_at": user.created_at}
 
 
 @router.put("/profile")
-def update_profile(payload: ProfileUpdate, db: Session = Depends(get_db)):
-    user = _local_user(db)
+def update_profile(payload: ProfileUpdate, claims: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user = ensure_authenticated_user(db, claims)
     try:
         user.name = payload.name
-        user.email = payload.email
         db.commit()
     except IntegrityError as error:
         db.rollback()
@@ -229,13 +227,19 @@ def update_profile(payload: ProfileUpdate, db: Session = Depends(get_db)):
     except SQLAlchemyError as error:
         db.rollback()
         raise HTTPException(status_code=500, detail="Could not update profile") from error
-    return {"id": user.id, "name": user.name, "email": user.email, "created_at": user.created_at}
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": claims.get("email"),
+        "created_at": user.created_at,
+        "email_change_requires_supabase_confirmation": payload.email != claims.get("email"),
+    }
 
 
 @router.get("/settings")
-def get_settings(db: Session = Depends(get_db)):
-    _local_user(db)
-    settings = db.get(UserSettings, DEFAULT_USER_ID)
+def get_settings(claims: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_id = ensure_authenticated_user(db, claims).id
+    settings = db.get(UserSettings, user_id)
     return {
         "notify_high_risk": settings.notify_high_risk,
         "risk_threshold": settings.risk_threshold,
@@ -245,9 +249,9 @@ def get_settings(db: Session = Depends(get_db)):
 
 
 @router.put("/settings")
-def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)):
-    _local_user(db)
-    settings = db.get(UserSettings, DEFAULT_USER_ID)
+def update_settings(payload: SettingsUpdate, claims: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_id = ensure_authenticated_user(db, claims).id
+    settings = db.get(UserSettings, user_id)
     try:
         settings.notify_high_risk = payload.notify_high_risk
         settings.risk_threshold = payload.risk_threshold
