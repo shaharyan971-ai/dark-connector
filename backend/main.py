@@ -4,16 +4,11 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from core.db.database import Base, SessionLocal, engine
+from core.config import settings
 from core.db.db import models  # noqa: F401
-from core.db.db.local_user import ensure_default_user
 from core.db.db.db.routes.detect import router as detect_router
 from core.db.db.db.routes.features import router as features_router
 from core.db.db.db.routes.routes.report import router as report_router
-
-Base.metadata.create_all(bind=engine)
-with SessionLocal() as db:
-    ensure_default_user(db)
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -23,11 +18,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://dark-connector.vercel.app",
+    allow_origins=settings.ALLOWED_ORIGINS + [
+        f"chrome-extension://{extension_id}"
+        for extension_id in settings.CHROME_EXTENSION_IDS
     ],
-    allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH"],
     allow_headers=["*"],

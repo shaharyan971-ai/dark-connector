@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DarkConnector dashboard
 
-## Getting Started
+The dashboard is a Next.js app. Browser requests to the API use the same-origin
+`/api/backend` proxy, which keeps Supabase access and refresh tokens in
+HttpOnly cookies rather than exposing them to page JavaScript.
 
-First, run the development server:
+## Local setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Copy `env.example` to `.env.local` and set:
+   - `SUPABASE_URL` and `SUPABASE_ANON_KEY` from your Supabase project.
+   - `NEXT_PUBLIC_SITE_URL=http://localhost:3000`.
+   - `BACKEND_API_URL=http://localhost:8000`.
+2. In Supabase Auth, enable email/password sign-in and allow the dashboard
+   callback URL `http://localhost:3000/auth/callback`. Add the production
+   dashboard callback URL before deployment.
+3. Configure the backend against the migrated PostgreSQL database and allow
+   the dashboard origin in `ALLOWED_ORIGINS`. See
+   [the backend deployment guide](../backend/README.md).
+4. Install and start the dashboard:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+   ```powershell
+   npm install
+   npm run dev
+   ```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Open `http://localhost:3000`. New users may need to confirm their email before
+signing in. Password recovery and email changes also use Supabase's configured
+email templates and redirect allowlist.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Production configuration
 
-## Learn More
+Set the four values from `env.example` in the dashboard hosting environment.
+`NEXT_PUBLIC_SITE_URL` must be the exact HTTPS dashboard origin, without a
+trailing path. Keep `SUPABASE_ANON_KEY` server-side in this app's environment;
+never configure a service-role key here or in a browser bundle. Apply the
+backend's PostgreSQL migration before pointing `BACKEND_API_URL` at the
+production API. Restrict CORS and Supabase redirect URLs to the actual deployed
+origins.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The browser extension is configured separately in `extension/config.js`; it
+needs the deployed API URL and Supabase project URL/public anon key at build
+time. Only publish an extension after setting those values and configuring its
+extension ID in the backend. See the backend deployment guide for the API
+trust and migration requirements.

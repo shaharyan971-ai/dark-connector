@@ -1,12 +1,15 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from core.db.database import get_db
+from core.auth import get_current_user
 from core.db.db.domain import extract_domain
-from core.db.db.local_user import DEFAULT_USER_ID
 from core.db.db.models import Alert, Report, SiteScore, UserSettings
+from core.db.db.tenant import ensure_authenticated_user
 from core.db.db.db.schemas import ReportCreate
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -16,7 +19,8 @@ router = APIRouter()
 
 
 @router.get("/report")
-async def list_reports(db: Session = Depends(get_db)):
+async def list_reports(claims: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_id = ensure_authenticated_user(db, claims).id
     sites = (
         db.query(
             SiteScore.domain,
@@ -24,6 +28,7 @@ async def list_reports(db: Session = Depends(get_db)):
             SiteScore.total_flags,
             SiteScore.confirmed_flags,
         )
+        .filter(SiteScore.user_id == user_id)
         .order_by(SiteScore.score.desc(), SiteScore.domain.asc())
         .all()
     )
@@ -42,10 +47,21 @@ async def list_reports(db: Session = Depends(get_db)):
 
 @router.post("/report")
 @limiter.limit("20/minute")
-async def create_report(request: Request, payload: ReportCreate, db: Session = Depends(get_db)):
+async def create_report(
+    request: Request,
+    payload: ReportCreate,
+    claims: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_id = ensure_authenticated_user(db, claims).id
     try:
+        user_settings = db.get(UserSettings, user_id)
+        if not user_settings or not user_settings.analytics_consent:
+            raise HTTPException(status_code=403, detail="Analytics consent is required to submit reports")
+
         for pattern in payload.patterns:
             report = Report(
+                user_id=user_id,
                 site_url=payload.site_url,
                 pattern_type=pattern.pattern_type,
                 confidence=pattern.confidence,
@@ -54,9 +70,29 @@ async def create_report(request: Request, payload: ReportCreate, db: Session = D
             db.add(report)
 
         domain = extract_domain(payload.site_url)
-        site = db.query(SiteScore).filter(SiteScore.domain == domain).first()
-        if not site:
-            site = SiteScore(domain=domain, total_flags=0, confirmed_flags=0, score=0)
+        values = {
+            "user_id": user_id,
+            "domain": domain,
+            "total_flags": 0,
+            "confirmed_flags": 0,
+            "score": 0,
+        }
+        dialect = db.get_bind().dialect.name
+        if dialect == "postgresql":
+            statement = pg_insert(SiteScore).values(**values).on_conflict_do_nothing(
+                index_elements=[SiteScore.user_id, SiteScore.domain]
+            )
+        elif dialect == "sqlite":
+            statement = sqlite_insert(SiteScore).values(**values).on_conflict_do_nothing(
+                index_elements=[SiteScore.user_id, SiteScore.domain]
+            )
+        else:
+            statement = None
+        if statement is not None:
+            db.execute(statement)
+        site = db.get(SiteScore, (user_id, domain))
+        if site is None:
+            site = SiteScore(**values)
             db.add(site)
         previous_score = site.score or 0
         site.total_flags += len(payload.patterns)
@@ -65,12 +101,12 @@ async def create_report(request: Request, payload: ReportCreate, db: Session = D
         site.score = min(100, site.confirmed_flags * 5 + site.total_flags)
         site.last_scanned = datetime.now(timezone.utc)
 
-        user_settings = db.get(UserSettings, DEFAULT_USER_ID)
         threshold = user_settings.risk_threshold if user_settings else 75
         notify_high_risk = user_settings.notify_high_risk if user_settings else True
         if notify_high_risk and previous_score <= threshold < site.score:
             for pattern in payload.patterns:
                 db.add(Alert(
+                    user_id=user_id,
                     site_url=payload.site_url,
                     pattern_type=pattern.pattern_type,
                     severity="high",

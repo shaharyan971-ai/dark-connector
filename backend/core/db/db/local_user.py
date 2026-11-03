@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 
 from core.db.db.models import User, UserSettings
 
-DEFAULT_USER_ID = "local-user"
+DEFAULT_USER_ID = "legacy-demo"
 
 
 def ensure_default_user(db: Session) -> User:
